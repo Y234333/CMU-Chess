@@ -39,6 +39,7 @@ class ChessPiece:
     # def getValidMoves(self, all_positions):
     #     pass
 
+
 class Pawn(ChessPiece):
     def __init__(self, color, position):
         # self.name = name
@@ -52,6 +53,9 @@ class Pawn(ChessPiece):
             return False
 
         if start_x == end_x and start_y == end_y:
+            return False
+
+        if new_position in all_positions:
             return False
 
         if self.get_color() == 'black':
@@ -91,7 +95,7 @@ class Pawn(ChessPiece):
 
         return False
     
-    def can_moveHelper(self, new_position):
+    def can_moveHelper(self, new_position, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
 
@@ -102,19 +106,19 @@ class Pawn(ChessPiece):
             return False
 
         if self.get_color() == 'black':
-            if start_y == 3 and end_y == start_y + 2 and end_x == start_x:
+            if start_y == 3 and end_y == start_y + 2 and end_x == start_x and new_position not in (blackPositions and whitePositions):
                 return True
-            if end_y == start_y + 1 and end_x == start_x:
+            if end_y == start_y + 1 and end_x == start_x and new_position not in (blackPositions and whitePositions):
                 return True
         elif self.get_color() == 'white':
-            if start_y == 8 and end_y == start_y - 2 and end_x == start_x:
+            if start_y == 8 and end_y == start_y - 2 and end_x == start_x and new_position not in (blackPositions and whitePositions):
                 return True
-            if end_y == start_y - 1 and end_x == start_x:
+            if end_y == start_y - 1 and end_x == start_x and new_position not in (blackPositions and whitePositions):
                 return True
 
         return False
     
-    def can_captureHelper(self, new_position):
+    def can_captureHelper(self, new_position, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
 
@@ -122,15 +126,15 @@ class Pawn(ChessPiece):
         dy = abs(start_y - end_y)
 
         if self.get_color() == 'white':
-            if dx == 1 and dy == 1:
+            if dx == 1 and dy == 1 and new_position not in whitePositions:
                 return True
         elif self.get_color() == 'black':
-            if ((start_x == end_x + 1) and (start_y == end_y - 1)) or ((start_x == end_x - 1) and (start_y == end_y - 1)):
+            if (((start_x == end_x + 1) and (start_y == end_y - 1)) or ((start_x == end_x - 1) and (start_y == end_y - 1))) and new_position not in blackPositions:
                 return True
 
         return False    
 
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -144,16 +148,15 @@ class Pawn(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move):
+            if self.can_moveHelper(move, whitePositions, blackPositions):
                 valid_moves.append(move)
-            elif self.can_captureHelper(move):
+            elif self.can_captureHelper(move, whitePositions, blackPositions):
                 for piece in pieces:
                     if piece.get_position() == move:
                         valid_moves.append(move)
                         break
 
         return valid_moves[:-2] if len(valid_moves) > 2 else valid_moves
-
 
 class Knight(ChessPiece):
     def __init__(self, color, position):
@@ -179,7 +182,7 @@ class Knight(ChessPiece):
             return False
         
         
-    def can_moveHelper(self, new_position):
+    def can_moveHelper(self, new_position, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
         
@@ -189,14 +192,20 @@ class Knight(ChessPiece):
         if end_x <= 1 or end_x >= 10 or end_y <= 1 or end_y >= 10:
             return False
         
-        if ((end_x == start_x + 1) or (end_x == start_x - 1)) and ((end_y == start_y + 2) or (end_y == start_y -2)):
-            return True
+        if (((end_x == start_x + 1) or (end_x == start_x - 1)) and ((end_y == start_y + 2) or (end_y == start_y -2))):
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
         elif ((end_y == start_y + 1) or (end_y == start_y - 1)) and ((end_x == start_x + 2) or (end_x == start_x - 2)):
-            return True
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
         else:
             return False        
    
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -210,7 +219,7 @@ class Knight(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move):
+            if self.can_moveHelper(move, whitePositions, blackPositions):
                 valid_moves.append(move)
         
         return valid_moves
@@ -255,7 +264,7 @@ class Queen(ChessPiece):
         else:
             return False
 
-    def can_moveHelper(self, new_position, all_positions):
+    def can_moveHelper(self, new_position, all_positions, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
         
@@ -286,11 +295,18 @@ class Queen(ChessPiece):
                     if (start_x + i * step_x, start_y) in all_positions:
                         return False
         
+            if self.get_color() == 'white':
+                if new_position in whitePositions:
+                    return False
+            elif self.get_color() == 'black':
+                if new_position in blackPositions:
+                    return False
+        
             return True
         else:
             return False
 
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -304,11 +320,9 @@ class Queen(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move, all_positions):
+            if self.can_moveHelper(move, all_positions, whitePositions, blackPositions):
                 valid_moves.append(move) 
-        
         return valid_moves
-
 
 class King(ChessPiece):
     def __init__(self, color, position):
@@ -333,7 +347,7 @@ class King(ChessPiece):
         else:
             return False
      
-    def can_moveHelper(self, new_position):
+    def can_moveHelper(self, new_position, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
         
@@ -347,11 +361,14 @@ class King(ChessPiece):
             return False
 
         if dx <= 1 and dy <= 1:
-            return True
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
         else:
             return False
         
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -365,11 +382,10 @@ class King(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move):
+            if self.can_moveHelper(move, whitePositions, blackPositions):
                 valid_moves.append(move)
         
         return valid_moves
-
 
 class Bishop(ChessPiece):
     def __init__(self, color, position):
@@ -400,7 +416,7 @@ class Bishop(ChessPiece):
         else:
             return False
         
-    def can_moveHelper(self, new_position, all_positions):
+    def can_moveHelper(self, new_position, all_positions, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
         
@@ -420,11 +436,14 @@ class Bishop(ChessPiece):
                 if (start_x + i * step_x, start_y + i * step_y) in all_positions:
                     return False
             
-            return True
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
         else:
             return False
         
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -438,11 +457,10 @@ class Bishop(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move, all_positions):
+            if self.can_moveHelper(move, all_positions, whitePositions, blackPositions):
                 valid_moves.append(move)
         
         return valid_moves
-
 
 class Rook(ChessPiece):
     def __init__(self, color, position):
@@ -466,7 +484,6 @@ class Rook(ChessPiece):
             self.set_position((end_x, end_y))
             return True
 
-        # Check if the move is along a file (same column)
         elif end_y == start_y and start_x != end_x:
             step = 1 if end_x > start_x else -1
             for x in range(start_x + step, end_x, step):
@@ -479,7 +496,7 @@ class Rook(ChessPiece):
             return False
         
         
-    def can_moveHelper(self, new_position, all_positions):
+    def can_moveHelper(self, new_position, all_positions, whitePositions, blackPositions):
         start_x, start_y = self.get_position()
         end_x, end_y = new_position
         
@@ -494,20 +511,25 @@ class Rook(ChessPiece):
             for y in range(start_y + step, end_y, step):
                 if (end_x, y) in all_positions:
                     return False
-            return True
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
 
-        # Check if the move is along a file (same column)
         elif end_y == start_y and start_x != end_x:
             step = 1 if end_x > start_x else -1
             for x in range(start_x + step, end_x, step):
                 if (x, end_y) in all_positions:
                     return False
-            return True
+            if self.get_color() == 'white' and new_position not in whitePositions:
+                return True
+            elif self.get_color() == 'black' and new_position not in blackPositions:
+                return True
 
         else:
             return False
 
-    def get_valid_moves(self, pieces, all_positions):
+    def get_valid_moves(self, pieces, all_positions, whitePositions, blackPositions):
         valid_moves = []
         moves = [
         (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
@@ -521,7 +543,7 @@ class Rook(ChessPiece):
         ]
         
         for move in moves:
-            if self.can_moveHelper(move, all_positions):
+            if self.can_moveHelper(move, all_positions, whitePositions, blackPositions):
                 valid_moves.append(move)
         
         return valid_moves

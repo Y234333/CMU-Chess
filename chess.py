@@ -1,12 +1,11 @@
 from cmu_graphics import *
 from achessPieces import ChessPiece, Pawn, Rook, Knight, Queen, King, Bishop
 import random
-
-# from network import Network as network
+import copy
 
 import time
-from time import perf_counter
-from datetime import timedelta
+
+
 
 #################################################################### 
 ## BASIC INITIALIZATION ##
@@ -20,6 +19,7 @@ def moreVariables(app):
     
     app.returnbutton = False
     
+    app.turn2 = 0
     app.counter = 0
     
     app.gameState = 'start'
@@ -36,6 +36,9 @@ def moreVariables(app):
     app.winner = ''
     
     app.hillPosition = ()
+    
+    app.positionc = (1,2)
+    app.valid_movesc = []
 
 def onAppStart(app):
     app.width, app.height = 600, 600
@@ -92,17 +95,15 @@ def onAppStart(app):
     
     moreVariables(app)
     
-    app.turn = 1
-    
-    app.whiteCheck = False
     app.blackCheck = False
-    
-    app.checkMate = False
-    
-    # app.net = network()
+    app.whiteCheck = False
     
 def onStep(app):
     app.counter += 1
+    if app.selectedPiece:
+        validMoves(app)
+
+
 
 #################################################################### 
 ## MORE INTIALIZATION (HELPER FUNCTIONS MOSTLY) ##
@@ -112,6 +113,16 @@ def currentPositions(blackPieces, whitePieces):
     black_positions = [(x, y) for x, y in (piece.get_position() for piece in blackPieces)]
     white_positions = [(x, y) for x, y in (piece.get_position() for piece in whitePieces)]
     allPositions = black_positions + white_positions
+    return allPositions
+
+def currentBlackPositions(blackPieces):
+    black_positions = [(x, y) for x, y in (piece.get_position() for piece in blackPieces)]
+    allPositions = black_positions
+    return allPositions
+
+def currentWhitePositions(whitePieces):
+    white_positions = [(x, y) for x, y in (piece.get_position() for piece in whitePieces)]
+    allPositions = white_positions
     return allPositions
 
 def moveHelperFunction(app, newPosition):
@@ -130,6 +141,7 @@ def selectedPiece(app,newPosition):
         if piece_info is not None and 'piece' in piece_info:
             if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
                 app.selectedPiece = piece_info
+                app.positionc = newPosition
                 return
 
 def gameStateSelector(app, x,y): 
@@ -162,15 +174,11 @@ def gameStateSelector(app, x,y):
         elif x>99 and x<505 and y>440 and y<555:
             app.gameState = 'hard'
         app.previousState = 'single'
-    elif app.gameState == 'tutorial' and app.stage > 8:
+    elif app.gameState == 'tutorial' and app.stage > 9:
         app.gameState = 'start'
         app.stage = 0
     
-    # drawRect(100,450,405,105,fill='darkred')
-    # drawRect(100,450,400,100,fill='red')
-    # drawLabel('Hard', 300,500, fill='black', size=30)
-    
-    if app.winner or app.checkMate:
+    if app.winner:
         app.initialized = False
         app.returnbutton = True
         app.winner = ''
@@ -233,7 +241,7 @@ def onMousePress(app, x, y):
     if app.gameState == 'tutorial':
         skipbuttons(app,x,y)
         customPlaces(app)
-        if app.stage >= 8:
+        if app.stage >= 9:
             app.winner = 'b'
     if app.gameState == 'fun':
         if app.funMode == 1:
@@ -287,12 +295,22 @@ def returnNormalMode(app):
         piece_y = 50 * piece.get_position()[1]
         app.piecesInfo.append({"piece": piece, "x": piece_x, "y": piece_y, "width": 50, "height": 50})
     app.selectedPiece = None
+    
+    app.blackCheck, app.whiteCheck = False, False
+
+def validMoves(app):
+    if app.selectedPiece:
+        piece = app.selectedPiece['piece']
+        app.valid_movesc = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces))
+        return
+
+
 
 #################################################################### 
 ## MULTIPLAYER IS BELOW ##
 ####################################################################
       
-def normalOnMousePress(app,x,y):
+def normalOnMousePress(app, x, y):
     if app.initialized == False:
         returnNormalMode(app)
         app.initialized = True
@@ -302,15 +320,11 @@ def normalOnMousePress(app,x,y):
     celly = 1 + (int((y - 0.5 * cellSize) // cellSize))
 
     newPosition = (cellx, celly)
+
     if app.selectedPiece is None:
         selectedPiece(app, newPosition)
-
     else:
-        for piece_info in app.piecesInfo:
-            if piece_info is not None and 'piece' in piece_info:
-                if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
-                    app.selectedPiece = piece_info
-                    return
+        selectedPiece(app, newPosition)
         
         if app.selectedPiece is not None and 'piece' in app.selectedPiece:
             piece = app.selectedPiece['piece']
@@ -323,6 +337,7 @@ def normalOnMousePress(app,x,y):
                             getCapturedPiece(app, newPosition, piece)
                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white' 
                             promotion(app)
+                            app.valid_movesc = []
                                             
                     else:
                         for piece_info in app.piecesInfo:
@@ -331,25 +346,35 @@ def normalOnMousePress(app,x,y):
                                     if piece_info['piece'].get_color() == piece.get_color():
                                         return False
                                     elif piece_info['piece'].get_color() != piece.get_color():
-                                        if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
+                                        if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
                                             capturedPiece = piece_info['piece']
                                             removePiece(app, capturedPiece, newPosition, piece_info)
                                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                                            
+                                            if isCheck(app, app.currentPlayer):
+                                                if app.currentPlayer == 'white':
+                                                    app.blackCheck = True
+                                                elif app.currentPlayer == 'black':
+                                                    app.whiteCheck = True
+                                            else:
+                                                app.blackCheck, app.whiteCheck = False, False
                                             promotion(app)
+                                            app.valid_movesc = []
                 else:
-                    if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
-                        old_position = piece.get_position()
-                        piece.set_position(newPosition)
-
-                        if not isCheck(app, piece.get_color()):
-                            moveHelperFunction(app, newPosition)
-                            app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
-                            promotion(app)
+                    if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
+                        moveHelperFunction(app, newPosition)
+                        app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                    
+                        if isCheck(app, app.currentPlayer):
+                            if app.currentPlayer == 'white':
+                                app.blackCheck = True
+                            elif app.currentPlayer == 'black':
+                                app.whiteCheck = True
                         else:
-                            piece.set_position(old_position)
-    print('Mate:', isCheckMate(app))
-    if isCheckMate(app):
-        app.winner = 'white' if app.currentPlayer == 'black' else 'black'
+                            app.blackCheck, app.whiteCheck = False, False
+                        
+                        promotion(app)
+                        app.valid_movesc = []
 
 def allValidMoves(app):
     valid_moves = {'black': [], 'white': []}
@@ -358,9 +383,7 @@ def allValidMoves(app):
         piece = piece_info['piece']
         piece_color = piece.get_color()
 
-        piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces))
-
-        # Extend the list of valid moves for the color, not append
+        piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces))
         valid_moves[piece_color].extend(piece_valid_moves)
 
     return valid_moves
@@ -371,89 +394,31 @@ def isCheck(app, color):
         piece = piece_info['piece']
         if piece.get_color() == color and piece.get_piece_type() == 'king':
             king = piece
-
+            break
+    
+    if king is None:
+        if color == 'black':
+            app.winner = 'white'
+        else:
+            app.winner = 'black'
+    
     moves = allValidMoves(app)
     opponent_color = 'black' if color == 'white' else 'white'
 
-    if king.get_position() in moves[opponent_color]:
-        return True
-
-    return False
-
-def checkIfCheck(app, color, position):
-    moves = allValidMoves(app)
-    opponent_color = 'black' if color == 'white' else 'white'
-
-    if position in moves[opponent_color]:
-        print('hi')
-        return True
-    
-    ##IT WAS NEVER IN MOVES BECAUSE THERE IS A PIECE THERE WITH SAME COLOR U FUCKING IDIOT
-
-    return False
-
-def isCheckMate(app):
-    blackKing = None
-    whiteKing = None
-    for piece_info in app.piecesInfo:
-        piece = piece_info['piece']
-        if piece.get_color() == 'black' and piece.get_piece_type() == 'king':
-            blackKing = piece
-        if piece.get_color() == 'white' and piece.get_piece_type() == 'king':
-            whiteKing = piece
-
-    moves = allValidMoves(app)
-
-    if isCheck(app, 'black'):
-        black_king_moves = blackKing.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces))
-        for move in black_king_moves:
-            if not checkIfCheck(app, 'black', move):
-                print('hi2')
-                return False
-            print('hi3')
-        return True
-
-    if isCheck(app, 'white'):
-        white_king_moves = whiteKing.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces))
-        for move in white_king_moves:
-            if not checkIfCheck(app, 'white', move):
-                print('hi4')
-                return False
-            print('hi5')
-        return True
-
-    return False
+    if king is not None:
+        return king.get_position() in moves[opponent_color]
+    else:
+        return False
 
 
-#################################################################### 
-## MUTLIPLAYER 2 DEVICE IS BELOW (NOT WORKING) ##
-####################################################################
-
-def normal2MousePress(app, x, y):
-    if app.initialized == False:
-        returnNormalMode(app)
-        app.initialized = True
-    
-    
-    cellSize = 50
-    cellx = 1 + (int((x - 0.5 * cellSize) // cellSize))
-    celly = 1 + (int((y - 0.5 * cellSize) // cellSize))
-
-    newPosition = (cellx, celly)
-    if app.selectedPiece is None:
-        selectedPiece(app, newPosition)
 
 #################################################################### 
 ## SINGLE PLAYER IS BELOW ##
 ####################################################################
 
-def defaultMousePressIsh(app, newPosition):
-    for piece_info in app.piecesInfo:
-        if piece_info is not None and 'piece' in piece_info:
-            if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
-                app.selectedPiece = piece_info
-                return
-
+def botMousePress(app, newPosition):
+    selectedPiece(app, newPosition)
+        
     if app.selectedPiece is not None and 'piece' in app.selectedPiece:
         piece = app.selectedPiece['piece']
         if piece is not None and piece.get_color() == app.currentPlayer:
@@ -463,8 +428,9 @@ def defaultMousePressIsh(app, newPosition):
                     if piece.can_capture(newPosition, (app.blackPieces + app.whitePieces)):
                         capturedPiece = None
                         getCapturedPiece(app, newPosition, piece)
+                        app.currentPlayer = 'white'
                         promotion(app)
-                        app.currentPlayer = 'black' 
+                        app.valid_movesc = []
                                         
                 else:
                     for piece_info in app.piecesInfo:
@@ -473,17 +439,88 @@ def defaultMousePressIsh(app, newPosition):
                                 if piece_info['piece'].get_color() == piece.get_color():
                                     return False
                                 elif piece_info['piece'].get_color() != piece.get_color():
-                                    if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
+                                    if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
                                         capturedPiece = piece_info['piece']
                                         removePiece(app, capturedPiece, newPosition, piece_info)
+                                        app.currentPlayer = 'white'
+                                        
+                                        if isCheck(app, app.currentPlayer):
+                                            if app.currentPlayer == 'white':
+                                                app.blackCheck = True
+                                            elif app.currentPlayer == 'black':
+                                                app.whiteCheck = True
+                                        else:
+                                            app.blackCheck, app.whiteCheck = False, False
                                         promotion(app)
-                                        app.currentPlayer = 'black' 
+                                        app.valid_movesc = []
             else:
-                if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
+                if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
                     moveHelperFunction(app, newPosition)
+                    app.currentPlayer = 'white'
+                
+                    if isCheck(app, app.currentPlayer):
+                        if app.currentPlayer == 'white':
+                            app.blackCheck = True
+                        elif app.currentPlayer == 'black':
+                            app.whiteCheck = True
+                    else:
+                        app.blackCheck, app.whiteCheck = False, False
+                    
                     promotion(app)
-                    app.currentPlayer = 'black'
+                    app.valid_movesc = []
 
+def defaultMousePressIsh(app, newPosition):
+        selectedPiece(app, newPosition)
+        
+        if app.selectedPiece is not None and 'piece' in app.selectedPiece:
+            piece = app.selectedPiece['piece']
+            if piece is not None and piece.get_color() == app.currentPlayer:
+                currentPosition = currentPositions(app.blackPieces, app.whitePieces)
+                if newPosition in currentPosition:
+                    if piece.get_piece_type() == 'pawn':
+                        if piece.can_capture(newPosition, (app.blackPieces + app.whitePieces)):
+                            capturedPiece = None
+                            getCapturedPiece(app, newPosition, piece)
+                            app.currentPlayer = 'black'
+                            promotion(app)
+                            app.valid_movesc = []
+                                            
+                    else:
+                        for piece_info in app.piecesInfo:
+                            if piece_info is not None and 'piece' in piece_info:
+                                if piece_info['piece'].get_position() == newPosition:
+                                    if piece_info['piece'].get_color() == piece.get_color():
+                                        return False
+                                    elif piece_info['piece'].get_color() != piece.get_color():
+                                        if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
+                                            capturedPiece = piece_info['piece']
+                                            removePiece(app, capturedPiece, newPosition, piece_info)
+                                            app.currentPlayer = 'black'
+                                            
+                                            if isCheck(app, app.currentPlayer):
+                                                if app.currentPlayer == 'white':
+                                                    app.blackCheck = True
+                                                elif app.currentPlayer == 'black':
+                                                    app.whiteCheck = True
+                                            else:
+                                                app.blackCheck, app.whiteCheck = False, False
+                                            promotion(app)
+                                            app.valid_movesc = []
+                else:
+                    if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
+                        moveHelperFunction(app, newPosition)
+                        app.currentPlayer = 'black'
+                    
+                        if isCheck(app, app.currentPlayer):
+                            if app.currentPlayer == 'white':
+                                app.blackCheck = True
+                            elif app.currentPlayer == 'black':
+                                app.whiteCheck = True
+                        else:
+                            app.blackCheck, app.whiteCheck = False, False
+                        
+                        promotion(app)
+                        app.valid_movesc = []
 
 def onMousePressSingle(app, x, y):
     if app.initialized == False:
@@ -492,6 +529,8 @@ def onMousePressSingle(app, x, y):
     
     if app.currentPlayer == 'black' and app.gameState == 'easy':
         EasySinglePlayer(app, x, y)
+    elif app.currentPlayer == 'black' and app.gameState == 'med':
+        MediumSinglePlayer(app, x, y)
     elif app.currentPlayer == 'black' and app.gameState == 'hard':
         HardSinglePlayer(app, x, y)
     else:
@@ -505,8 +544,7 @@ def onMousePressSingle(app, x, y):
 
         else:
             defaultMousePressIsh(app, newPosition)
-            
-        
+                    
 def allValidMovesBlack(app):
     valid_moves = {'pawn': [], 'rook': [], 'knight': [], 'bishop': [], 'queen': [], 'king': []}
 
@@ -516,32 +554,33 @@ def allValidMovesBlack(app):
 
         if piece_color == 'black':
             piece_type = piece.get_piece_type()
-            piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces))
+            piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces))
 
             # Extend the list of valid moves for the piece type
             valid_moves[piece_type].extend(piece_valid_moves)
 
     return valid_moves
 
-## EASY
+## EASY (FULLY RANDOMIZED MOVES)
 
 def EasySinglePlayer(app, x, y):
     if app.currentPlayer == 'black':
         
         moves = allValidMoves(app)
         moves2 = allValidMovesBlack(app)
-        
+        move = None
         if moves['black']:
-            move = random.choice(moves['black'])
-            piece_type = None
+            if not move:
+                move = random.choice(moves['black'])
+                piece_type = None
             for key, value in moves2.items():
-                if move in value:
-                    piece_type = key
-                    break
+                    if move in value:
+                        piece_type = key
+                        break
 
             for piece_info in app.piecesInfo:
                 if piece_info['piece'].get_piece_type() == piece_type: 
-                    for i in piece_info['piece'].get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces)):
+                    for i in piece_info['piece'].get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces)):
                         if i == move:
                             app.selectedPiece = piece_info
                             break
@@ -552,48 +591,154 @@ def EasySinglePlayer(app, x, y):
                 return
                 
             else:
-                for piece_info in app.piecesInfo:
-                    if piece_info is not None and 'piece' in piece_info:
-                        if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
+                botMousePress(app, newPosition)
+
+## MEDIUM (AS SOON AS HE SEES A KILL HE KILLS)
+
+def MediumSinglePlayer(app, x, y):
+    if app.currentPlayer == 'black':
+        
+        moves = allValidMoves(app)
+        moves2 = allValidMovesBlack(app)
+        move = None
+        if moves['black']:
+            for piece_info in app.piecesInfo:
+                if piece_info is not None and 'piece' in piece_info:
+                    if piece_info['piece'].get_color() == 'white':
+                        if piece_info['piece'].get_piece_type() == 'king':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+                        elif piece_info['piece'].get_piece_type() == 'queen':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+                        elif piece_info['piece'].get_piece_type() == 'rook':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+                        elif piece_info['piece'].get_piece_type() == 'bishop':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+                        elif piece_info['piece'].get_piece_type() == 'knight':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+                        elif piece_info['piece'].get_piece_type() == 'pawn':
+                            if piece_info['piece'].get_position() in moves['black']:
+                                move = piece_info['piece'].get_position()
+            if not move:
+                move = random.choice(moves['black'])
+                piece_type = None
+            for key, value in moves2.items():
+                    if move in value:
+                        piece_type = key
+                        break
+
+            for piece_info in app.piecesInfo:
+                if piece_info['piece'].get_piece_type() == piece_type: 
+                    for i in piece_info['piece'].get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces)):
+                        if i == move:
                             app.selectedPiece = piece_info
-                            return
+                            break
+            
+            newPosition = move
+            if app.selectedPiece is None:
+                app.winner = 'white'
+                return
                 
-                if app.selectedPiece is not None and 'piece' in app.selectedPiece:
-                    piece = app.selectedPiece['piece']
-                    if piece is not None and piece.get_color() == app.currentPlayer:
-                        currentPosition = currentPositions(app.blackPieces, app.whitePieces)
-                        if newPosition in currentPosition:
-                            if piece.get_piece_type() == 'pawn':
-                                if piece.can_capture(newPosition, (app.blackPieces + app.whitePieces)):
-                                    capturedPiece = None
-                                    getCapturedPiece(app, newPosition, piece)
-                                    promotion(app)
-                                    app.currentPlayer = 'white' 
-                                                    
-                            else:
-                                for piece_info in app.piecesInfo:
-                                    if piece_info is not None and 'piece' in piece_info:
-                                        if piece_info['piece'].get_position() == newPosition:
-                                            if piece_info['piece'].get_color() == piece.get_color():
-                                                return False
-                                            elif piece_info['piece'].get_color() != piece.get_color():
-                                                if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
-                                                    capturedPiece = piece_info['piece']
-                                                    removePiece(app, capturedPiece, newPosition, piece_info)
-                                                    promotion(app)
-                                                    app.currentPlayer = 'white' 
-                        else:
-                            if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
-                                moveHelperFunction(app, newPosition)
-                                promotion(app)
-                                app.currentPlayer = 'white'
+            else:
+                botMousePress(app, newPosition)
 
-
-## HARD
-
-
+## HARD (PUSHES FOR PROMOTION - PUSHES FOR POSITION - KILLS WHEN POSSIBLE)
 
 def HardSinglePlayer(app, x, y):
+    print('hello')
+    if app.currentPlayer == 'black':
+        
+        moves = allValidMoves(app)
+        moves2 = allValidMovesBlack(app)
+        move = None
+
+        if moves['black']:
+            for piece_info in app.piecesInfo: 
+                if piece_info is not None and 'piece' in piece_info:
+                    if piece_info['piece'].get_color() == 'white':
+                        if piece_info['piece'].get_piece_type() == 'king':
+                            if piece_info['piece'].get_position() in moves['black']: ## CAPTURES KING
+                                print('kill king')
+                                move = piece_info['piece'].get_position()
+
+            # if not move: NOT WORKING
+            #     if isCheck(app, 'black'):
+            #         print('CHECK')
+            #         for key, value in moves2.items(): ## REMOVES KING FROM CHECK?
+            #             if key == 'king':
+            #                 if value:
+            #                     for i in value:
+            #                         if i:
+            #                             print('check!')
+            #                             move = random.choice(i)
+
+            if app.turn2 % 2 == 0 and not move:
+                for piece_info in app.piecesInfo:
+                    if piece_info is not None and 'piece' in piece_info:
+                        if piece_info['piece'].get_color() == 'white': ## FORCES CAPTURE
+                            if piece_info['piece'].get_piece_type() == 'queen':
+                                if piece_info['piece'].get_position() in moves['black']:
+                                    move = piece_info['piece'].get_position()
+                            elif piece_info['piece'].get_piece_type() == 'rook':
+                                if piece_info['piece'].get_position() in moves['black']:
+                                    move = piece_info['piece'].get_position()
+                            elif piece_info['piece'].get_piece_type() == 'bishop':
+                                if piece_info['piece'].get_position() in moves['black']:
+                                    move = piece_info['piece'].get_position()
+                            elif piece_info['piece'].get_piece_type() == 'knight':
+                                if piece_info['piece'].get_position() in moves['black']:
+                                    move = piece_info['piece'].get_position()
+                            elif piece_info['piece'].get_piece_type() == 'pawn':
+                                if piece_info['piece'].get_position() in moves['black']:
+                                    move = piece_info['piece'].get_position()
+                            if move:
+                                print('capture')
+                                app.turn2 += 1
+            elif app.turn2 % 2 != 0 and not move:
+                for key, value in moves2.items():
+                    if key == 'pawn': ## FORCES PROMOTION
+                        for (x, y) in value:
+                            if y == 9:
+                                move = (x, y)
+                    else:
+                        for (x, y) in value:
+                            if y == 5 or y == 6:
+                                print("cool2")
+                                move = (x, y)
+                app.turn2 += 1
+
+            if not move:
+                move = random.choice(moves['black'])
+                piece_type = None
+            for key, value in moves2.items():
+                    if move in value:
+                        piece_type = key
+                        break
+                            
+            for piece_info in app.piecesInfo:
+                if piece_info['piece'].get_piece_type() == piece_type: 
+                    for i in piece_info['piece'].get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces)):
+                        if i == move:
+                            app.selectedPiece = piece_info
+                            break
+            
+            newPosition = move
+            if app.selectedPiece is None:
+                app.winner = 'white'
+                return
+                
+            else:
+                botMousePress(app, newPosition)
+
+
+
+## ATTEMPT AT INTEGRATING MINIMAX - FAILED (SHOULD BE IGNORED)
+
+def HardSinglePlayerFAIL(app, x, y):
     if app.currentPlayer == 'black':
         
         score, best_move = minimax(app, app.piecesInfo, 3, float('-inf'), float('inf'), False)
@@ -648,7 +793,6 @@ def HardSinglePlayer(app, x, y):
                             promotion(app)
                             app.currentPlayer = 'white'
 
-
 def allValidMovesMiniMax(app):
     valid_moves = []
 
@@ -657,7 +801,7 @@ def allValidMovesMiniMax(app):
         piece_color = piece.get_color()
 
         if piece_color == 'black':
-            piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces))
+            piece_valid_moves = piece.get_valid_moves((app.blackPieces + app.whitePieces), currentPositions(app.blackPieces, app.whitePieces), currentWhitePositions(app.whitePieces), currentWhitePositions(app.blackPieces))
 
             # Extend the list of valid moves with the piece and move
             for move in piece_valid_moves:
@@ -727,8 +871,6 @@ def minimax(app, position, depth, alpha, beta, maximizingPlayer):
                 break
         return maxEval, best_move
 
-
-
 def static_evaluation(app):
     piece_values = {
         'pawn': 1,
@@ -751,6 +893,7 @@ def static_evaluation(app):
     return evaluation
 
 
+
 #################################################################### 
 ## GRAPHICS ARE BELOW ##
 ####################################################################
@@ -761,7 +904,7 @@ def goBack():
 
 def drawStartScreen():
     drawRect(0,0,600,600,fill=rgb(48, 46, 43))
-    drawLabel('Play Chess!', 300, 70,fill='white',size=60)
+    drawLabel('Chess Extreme', 300, 70,fill='white',size=60)
     
     ##
     
@@ -790,8 +933,8 @@ def drawSinglePlayer():
     drawRect(100,150,400,100,fill='green')
     drawLabel('Easy', 300,200, fill='black', size=30)
     
-    drawRect(100,300,405,105,fill='yellow', opacity=80)
-    drawRect(100,300,400,100,fill='yellow')
+    drawRect(100,300,405,105,fill='orange', opacity=80)
+    drawRect(100,300,400,100,fill='orange')
     drawLabel('Medium', 300,350, fill='black', size=30)
     
     drawRect(100,450,405,105,fill='darkred')
@@ -816,10 +959,6 @@ def drawMultiPlayer():
     drawRect(100,300,405,105,fill='pink', opacity=80)
     drawRect(100,300,400,100,fill='pink')
     drawLabel('Fun Mode', 300,350, fill='black', size=30)
-    
-    drawRect(100,450,405,105,fill='darkred')
-    drawRect(100,450,400,100,fill='red')
-    drawLabel('Normal Mode (2 device)', 300,500, fill='black', size=30)
     
     goBack()
 
@@ -852,6 +991,10 @@ def drawBoard(app):
                 drawRect(425 - (column * 50), 75 + row * 50, 50, 50, fill=rgb(119, 148, 85))
     
     drawGameState(app)
+    drawWarning(app)
+    
+    if (app.gameState == 'easy' or app.gameState == 'med' or app.gameState == 'hard') and not app.winner:
+        drawLabel("keep clicking here until bot makes a move!", 300, 550, fill='white', size=10)
 
 def drawPieces(app):
     for piece in app.piecesInfo:
@@ -862,32 +1005,61 @@ def drawPieces(app):
         color = piece["piece"].get_color()
         url = app.pieceImages[color][piece_type]
         drawImage(url, piece["x"]-20, piece["y"]-20)
-        
-
-        
+    if app.selectedPiece:
+        (x, y) = app.positionc
+        x = x * 50
+        y = y * 50   
+        drawRect(x-25, y-25, 50, 50, fill='blue', opacity=30)
+    if app.valid_movesc:
+        for i in app.valid_movesc:
+            (x, y) = i
+            x = x * 50
+            y = y * 50   
+            drawRect(x-25, y-25, 50, 50, fill='blue', opacity=30)
+                       
+def drawWarning(app):
+    if app.blackCheck:
+        for piece_info in app.piecesInfo:
+            piece = piece_info['piece']
+            if piece.get_color() == 'white' and piece.get_piece_type() == 'king':
+                position = piece.get_position()
+        x, y = position
+        x = x * 50
+        y = y * 50   
+        drawRect(x-25, y-25, 50, 50, fill='red', opacity=50)
+    if app.whiteCheck:
+        for piece_info in app.piecesInfo:
+            piece = piece_info['piece']
+            if piece.get_color() == 'black' and piece.get_piece_type() == 'king':
+                position = piece.get_position()
+        x, y = position
+        x = x * 50
+        y = y * 50   
+        drawRect(x-25, y-25, 50, 50, fill='red', opacity=50)
+            
 def redrawAll(app):        
     drawBoard(app)
     drawPieces(app)
-                
-    # drawLabel(app.counter, 50, 50)
         
-    if app.gameState == 'start': ## WORKS FULLY
+    if app.gameState == 'start': ## WORKS
         drawStartScreen()
-    if app.gameState == 'single': ## WORKS FULLY (design wise)
+    if app.gameState == 'single': ## WORKS
         drawSinglePlayer()
-        if app.gameState == 'easy': ## WORKS - Please keep clicking screen until it makes a move
+        if app.gameState == 'easy': ## WORKS
             pass
-    if app.gameState == 'multi': ## WORKS FULLY
+    if app.gameState == 'multi': ## WORKS
         drawMultiPlayer() 
-    if app.gameState == 'normal' or app.gameState == 'normal2': ## WORKS FULLY
+    if app.gameState == 'normal' or app.gameState == 'normal2': ## WORKS
         drawBoard(app)
         drawPieces(app)
-    if app.gameState == 'tutorial': ## WORKS FULLY
+    if app.gameState == 'tutorial': ## WORKS
         runTutorial(app)
-    if app.gameState == 'fun': ##All work except promoted piece never dies!
+    if app.gameState == 'fun': ##WORKS
         drawBoard(app)
         runFunMode(app)
         drawPieces(app)  
+
+
 
 #################################################################### 
 ## FUN MODE IS BELOW ##
@@ -917,7 +1089,6 @@ def customPieces(app):
         if app.funMode == 4:
             pass
 
-
 ##FUN MODE 1 IS BELOW - INVINSIBLE PROMOTION CHARACTER (NEVER DIES)
 
 def promotionFunMode(app):
@@ -936,13 +1107,73 @@ def promotionFunMode(app):
                 app.piecesInfo[i] = {"piece": new_queen, "x": piece_info["x"], "y": piece_info["y"], "width": 50, "height": 50}
 
 def onMousePress1(app,x,y):
-    pass
+    if app.initialized == False:
+        returnNormalMode(app)
+        app.initialized = True
+    
+    cellSize = 50
+    cellx = 1 + (int((x - 0.5 * cellSize) // cellSize))
+    celly = 1 + (int((y - 0.5 * cellSize) // cellSize))
+
+    newPosition = (cellx, celly)
+
+    if app.selectedPiece is None:
+        selectedPiece(app, newPosition)
+    else:
+        selectedPiece(app, newPosition)
+        
+        if app.selectedPiece is not None and 'piece' in app.selectedPiece:
+            piece = app.selectedPiece['piece']
+            if piece is not None and piece.get_color() == app.currentPlayer:
+                currentPosition = currentPositions(app.blackPieces, app.whitePieces)
+                if newPosition in currentPosition:
+                    if piece.get_piece_type() == 'pawn':
+                        if piece.can_capture(newPosition, (app.blackPieces + app.whitePieces)):
+                            capturedPiece = None
+                            getCapturedPiece(app, newPosition, piece)
+                            app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white' 
+                            promotionFunMode(app)
+                            app.valid_movesc = []
+                                            
+                    else:
+                        for piece_info in app.piecesInfo:
+                            if piece_info is not None and 'piece' in piece_info:
+                                if piece_info['piece'].get_position() == newPosition:
+                                    if piece_info['piece'].get_color() == piece.get_color():
+                                        return False
+                                    elif piece_info['piece'].get_color() != piece.get_color():
+                                        if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
+                                            capturedPiece = piece_info['piece']
+                                            removePiece(app, capturedPiece, newPosition, piece_info)
+                                            app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                                            
+                                            if isCheck(app, app.currentPlayer):
+                                                if app.currentPlayer == 'white':
+                                                    app.blackCheck = True
+                                                elif app.currentPlayer == 'black':
+                                                    app.whiteCheck = True
+                                            else:
+                                                app.blackCheck, app.whiteCheck = False, False
+                                            promotionFunMode(app)
+                                            app.valid_movesc = []
+                else:
+                    if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
+                        moveHelperFunction(app, newPosition)
+                        app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                    
+                        if isCheck(app, app.currentPlayer):
+                            if app.currentPlayer == 'white':
+                                app.blackCheck = True
+                            elif app.currentPlayer == 'black':
+                                app.whiteCheck = True
+                        else:
+                            app.blackCheck, app.whiteCheck = False, False
+                        
+                        promotionFunMode(app)
+                        app.valid_movesc = []
 
 def drawfunMode1():
     drawLabel('A promoted piece will never die!', 300, 550, fill='white', size=20)
-
-##ADD COMPELETE ONMOUSEPRESS AND CHANGE PROMOTION TO TO PROMOTIONFUNMODE
-
 
 ##FUN MODE 2 IS BELOW - ALL ROOKS (FREE FOR ALL - FIRST TO KILL ALL WINS)
 
@@ -972,12 +1203,7 @@ def onMousePress2(app,x,y):
         selectedPiece(app, newPosition)
 
     else:
-        # Check if another piece is selected
-        for pieceInfo in app.piecesInfo:
-            if pieceInfo is not None and 'piece' in pieceInfo:
-                if pieceInfo['piece'].get_position() == newPosition and pieceInfo['piece'].get_color() == app.currentPlayer:
-                    app.selectedPiece = pieceInfo
-                    return
+        selectedPiece(app, newPosition)
         
         if app.selectedPiece is not None and 'piece' in app.selectedPiece:
             piece = app.selectedPiece['piece']
@@ -989,6 +1215,7 @@ def onMousePress2(app,x,y):
                             capturedPiece = None
                             getCapturedPiece(app, newPosition, piece)
                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white' 
+                            app.valid_movesc = []
                                             
                     else:
                         for pieceInfo in app.piecesInfo:
@@ -1001,10 +1228,12 @@ def onMousePress2(app,x,y):
                                             capturedPiece = pieceInfo['piece']
                                             removePiece(app, capturedPiece, newPosition, pieceInfo)
                                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                                            app.valid_movesc = []
                 else:
                     if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
                         moveHelperFunction(app, newPosition)
                         app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                        app.valid_movesc = []
 
 def allPiecesCaptured(pieces, color):
     for piece in pieces:
@@ -1054,11 +1283,7 @@ def onMousePress3(app,x,y):
         selectedPiece(app, newPosition)
 
     else:
-        for piece_info in app.piecesInfo:
-            if piece_info is not None and 'piece' in piece_info:
-                if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
-                    app.selectedPiece = piece_info
-                    return
+        selectedPiece(app, newPosition)
         
         if app.selectedPiece is not None and 'piece' in app.selectedPiece:
             piece = app.selectedPiece['piece']
@@ -1075,10 +1300,12 @@ def onMousePress3(app,x,y):
                                         capturedPiece = piece_info['piece']
                                         removePiece(app, capturedPiece, newPosition, piece_info)
                                         app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                                        app.valid_movesc = []
                 else:
                     if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
                         moveHelperFunction(app, newPosition)
                         app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                        app.valid_movesc = []
     
 def drawfunMode3():
     drawLabel('FREE FOR ALL! KILL ALL TO WIN!!', 300, 550, fill='white', size=20)
@@ -1106,17 +1333,11 @@ def onMousePress4(app,x,y):
     celly = 1 + (int((y - 0.5 * cellSize) // cellSize))
 
     newPosition = (cellx, celly)
+
     if app.selectedPiece is None:
         selectedPiece(app, newPosition)
-
-
     else:
-        # Check if another piece is selected
-        for piece_info in app.piecesInfo:
-            if piece_info is not None and 'piece' in piece_info:
-                if piece_info['piece'].get_position() == newPosition and piece_info['piece'].get_color() == app.currentPlayer:
-                    app.selectedPiece = piece_info
-                    return
+        selectedPiece(app, newPosition)
         
         if app.selectedPiece is not None and 'piece' in app.selectedPiece:
             piece = app.selectedPiece['piece']
@@ -1129,6 +1350,7 @@ def onMousePress4(app,x,y):
                             getCapturedPiece(app, newPosition, piece)
                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white' 
                             promotion(app)
+                            app.valid_movesc = []
                                             
                     else:
                         for piece_info in app.piecesInfo:
@@ -1137,16 +1359,35 @@ def onMousePress4(app,x,y):
                                     if piece_info['piece'].get_color() == piece.get_color():
                                         return False
                                     elif piece_info['piece'].get_color() != piece.get_color():
-                                        if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
+                                        if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
                                             capturedPiece = piece_info['piece']
                                             removePiece(app, capturedPiece, newPosition, piece_info)
                                             app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                                            
+                                            if isCheck(app, app.currentPlayer):
+                                                if app.currentPlayer == 'white':
+                                                    app.blackCheck = True
+                                                elif app.currentPlayer == 'black':
+                                                    app.whiteCheck = True
+                                            else:
+                                                app.blackCheck, app.whiteCheck = False, False
                                             promotion(app)
+                                            app.valid_movesc = []
                 else:
-                    if app.selectedPiece['piece'].can_move(newPosition, currentPositions(app.blackPieces, app.whitePieces)):
+                    if app.selectedPiece['piece'].can_move(newPosition, currentPosition):
                         moveHelperFunction(app, newPosition)
                         app.currentPlayer = 'black' if app.currentPlayer == 'white' else 'white'
+                    
+                        if isCheck(app, app.currentPlayer):
+                            if app.currentPlayer == 'white':
+                                app.blackCheck = True
+                            elif app.currentPlayer == 'black':
+                                app.whiteCheck = True
+                        else:
+                            app.blackCheck, app.whiteCheck = False, False
+                        
                         promotion(app)
+                        app.valid_movesc = []
 
 def drawHillPosition(app):
     if app.initialized:
@@ -1161,12 +1402,14 @@ def drawHillPosition(app):
 def drawfunMode4():
     drawLabel('KING OF THE HILL. GET YOUR KING TO THE RED SQUARE.', 300, 550, fill='white', size=20)
 
+
+
 ####################################################################
 ## TUTORIAL CODE IS BELOW ##
 ####################################################################
 
 def runTutorial(app):
-    if app.stage >= 0 and app.stage <= 8:
+    if app.stage >= 0 and app.stage <= 9:
         drawBoard(app)
     if app.stage == 0:
         stageZero()
@@ -1188,6 +1431,8 @@ def runTutorial(app):
         stageEight(app)
     elif app.stage == 9:
         stageNine()
+    elif app.stage == 10:
+        stageTen()
     drawButtons()
 
 def customPlaces(app):
@@ -1215,7 +1460,7 @@ def skipbuttons(app,x, y):
     if x>400 and x<500 and y>0 and y<50 and app.stage >0:
         app.stage -=1
         time.sleep(0.1)
-    elif x>500 and x<600 and y>0 and y<50 and app.stage<15: ##CHANGE HERE
+    elif x>500 and x<600 and y>0 and y<50 and app.stage<10:
         app.stage +=1
         time.sleep(0.1)
 
@@ -1386,6 +1631,18 @@ def stageNine():
     drawLabel("play and play accordingly. Outsmarting your opponent isn't", 300, 250, fill='white', size=20)
     drawLabel('always by capturing more pieces but by rather figuring out', 300, 300, fill='white', size=20)
     drawLabel('a way past his defenses to attack the king and cornering him.', 300, 350, fill='white', size=20)
+    
+    drawLabel('Good Luck! Remember to have fun!', 300, 450, fill='white', size=20)
+
+def stageTen():
+    drawRect(0,0,600,600,fill=rgb(48, 46, 43))
+    
+    drawLabel('HOWEVER!! This is not normal chess...', 300, 100, fill='white', size=20)
+    drawLabel('Whenever you play chess in real life and win, you always', 300, 150, fill='white', size=20)
+    drawLabel('kick the king of the loser player and lay him down as he has', 300, 200, fill='white', size=20)
+    drawLabel("LOST. Well... here, you have to kill the king of the other", 300, 250, fill='white', size=20)
+    drawLabel('player. You get the satisfaction of winning and destroying', 300, 300, fill='white', size=20)
+    drawLabel('your opponent. HAHAHHAHA!', 300, 350, fill='white', size=20)
     
     drawLabel('Good Luck! Remember to have fun!', 300, 450, fill='white', size=20)
 
